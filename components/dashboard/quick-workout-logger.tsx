@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Minus, X, Play, Save } from "lucide-react"
 import { toast } from "sonner"
-import { useWorkouts } from "@/hooks/use-api"
+import { useWorkouts } from "@/hooks/use-workouts"
+import { Database } from "@/database.types"
 
 interface Exercise {
   id: string
@@ -24,12 +25,15 @@ interface Exercise {
   }>
 }
 
-const exerciseTypes = {
+type ExerciseType = Database["public"]["Enums"]["exercise_type"]
+
+const exerciseTypes: Record<ExerciseType, { label: string; metrics: string[] }> = {
   strength: { label: "Strength", metrics: ["reps", "weight"] },
   cardio: { label: "Cardio", metrics: ["duration", "distance"] },
   flexibility: { label: "Flexibility", metrics: ["duration"] },
   bodyweight: { label: "Bodyweight", metrics: ["reps"] },
 }
+
 
 const commonExercises = {
   strength: ["Bench Press", "Squat", "Deadlift", "Overhead Press", "Barbell Row"],
@@ -38,13 +42,33 @@ const commonExercises = {
   bodyweight: ["Push-ups", "Pull-ups", "Burpees", "Plank", "Mountain Climbers"],
 }
 
+const normalizeWorkoutType = (type: string): Database["public"]["Enums"]["workout_type"] => {
+  switch (type) {
+    case "bodyweight":
+      return "strength"
+    case "strength":
+    case "cardio":
+    case "flexibility":
+    case "mobility":
+    case "hiit":
+    case "yoga":
+    case "crossfit":
+    case "recovery":
+    case "general":
+      return type
+    default:
+      return "general"
+  }
+}
+
+
 export function QuickWorkoutLogger() {
   const [workoutName, setWorkoutName] = useState("")
   const [exercises, setExercises] = useState<Exercise[]>([])
-  const { createWorkout } = useWorkouts()
+  const { addWorkout } = useWorkouts()
   const [isLogging, setIsLogging] = useState(false)
 
-  const addExercise = (type: keyof typeof exerciseTypes) => {
+  const addExercise = (type: "strength" | "cardio" | "flexibility" | "bodyweight") => {
     const newExercise: Exercise = {
       id: Date.now().toString(),
       name: "",
@@ -82,9 +106,9 @@ export function QuickWorkoutLogger() {
       exercises.map((ex) =>
         ex.id === exerciseId
           ? {
-              ...ex,
-              sets: ex.sets.map((set, i) => (i === setIndex ? { ...set, [field]: value } : set)),
-            }
+            ...ex,
+            sets: ex.sets.map((set, i) => (i === setIndex ? { ...set, [field]: value } : set)),
+          }
           : ex,
       ),
     )
@@ -95,9 +119,9 @@ export function QuickWorkoutLogger() {
       exercises.map((ex) =>
         ex.id === exerciseId
           ? {
-              ...ex,
-              sets: ex.sets.map((set, i) => (i === setIndex ? { ...set, completed: !set.completed } : set)),
-            }
+            ...ex,
+            sets: ex.sets.map((set, i) => (i === setIndex ? { ...set, completed: !set.completed } : set)),
+          }
           : ex,
       ),
     )
@@ -116,15 +140,22 @@ export function QuickWorkoutLogger() {
 
     setIsLogging(true)
     try {
-      await createWorkout({
+      await addWorkout({
         name: workoutName,
         exercises: exercises.map((ex) => ({
           ...ex,
-          sets: ex.sets.filter((set) => set.completed), // Only save completed sets
+          sets: ex.sets.filter((set) => set.completed),
         })),
-        tags: exercises.map((ex) => ex.type),
-        date: new Date().toISOString(),
-      })
+        tags: Array.from(new Set(exercises.map((ex) => ex.type))),
+        workout_date: new Date().toISOString(),
+
+        calories_burned: 0,
+        completed: exercises.every((ex) => ex.sets.every((set) => set.completed)),
+        duration_minutes: null,
+        notes: "",
+        type: normalizeWorkoutType(exercises[0]?.type ?? "general"),
+      });
+
 
       toast.success("Workout saved successfully! 🎉")
       setWorkoutName("")
@@ -248,7 +279,7 @@ export function QuickWorkoutLogger() {
                 key={type}
                 variant="outline"
                 size="sm"
-                onClick={() => addExercise(type as keyof typeof exerciseTypes)}
+                onClick={() => addExercise(type as "strength" | "cardio" | "flexibility" | "bodyweight")}
               >
                 <Plus className="mr-1 h-3 w-3" />
                 {config.label}

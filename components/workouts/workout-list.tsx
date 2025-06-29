@@ -2,8 +2,8 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, Clock, Dumbbell, Users } from "lucide-react"
-import { useWorkouts } from "@/hooks/use-api"
+import { Calendar, Clock, Dumbbell } from "lucide-react"
+import { useWorkouts } from "@/hooks/use-workouts"
 import { Skeleton } from "@/components/ui/skeleton"
 
 export function WorkoutList() {
@@ -56,13 +56,13 @@ export function WorkoutList() {
 
   return (
     <div className="space-y-4">
-      {workouts.map((workout: any) => (
+      {workouts.map((workout) => (
         <Card key={workout.id} className="hover:shadow-md transition-shadow">
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center space-x-2">
                 <span>{workout.name}</span>
-                <Badge variant={workout.completed ? "default" : "secondary"}>{workout.tags[0] || "Workout"}</Badge>
+                <Badge variant={workout.completed ? "default" : "secondary"}>{workout.type || "Workout"}</Badge>
               </CardTitle>
               {workout.completed && (
                 <Badge variant="outline" className="text-green-600 border-green-600">
@@ -75,22 +75,18 @@ export function WorkoutList() {
             <div className="flex items-center space-x-6 text-sm text-muted-foreground">
               <div className="flex items-center space-x-1">
                 <Calendar className="h-4 w-4" />
-                <span>{new Date(workout.date).toLocaleDateString()}</span>
+                <span>{new Date(workout.workout_date).toLocaleDateString()}</span>
               </div>
               <div className="flex items-center space-x-1">
                 <Clock className="h-4 w-4" />
-                <span>{workout.duration} min</span>
+                <span>{workout.duration_minutes} min</span>
               </div>
               <div className="flex items-center space-x-1">
                 <Dumbbell className="h-4 w-4" />
-                <span>{workout.exercises.length} exercises</span>
+                <span>
+                  {Array.isArray(workout.exercises) ? workout.exercises.length : 0} exercises
+                </span>
               </div>
-              {workout.friends && workout.friends.length > 0 && (
-                <div className="flex items-center space-x-1">
-                  <Users className="h-4 w-4" />
-                  <span>with {workout.friends.join(", ")}</span>
-                </div>
-              )}
             </div>
           </CardContent>
         </Card>

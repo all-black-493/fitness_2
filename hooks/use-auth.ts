@@ -1,54 +1,96 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import type { User } from "@supabase/supabase-js"
+import { createClient } from "@/lib/supabase/client"
+import type { Database } from "@/database.types"
 
-interface User {
-  userId: string
-  email: string
-  username: string
-}
+type UserProfile = Database["public"]["Tables"]["profiles"]["Row"]
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null)
+  const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
-  const router = useRouter()
+  const supabase = createClient()
 
   useEffect(() => {
-    // Check authentication status
-    const checkAuth = async () => {
-      try {
-        const response = await fetch("/api/auth/me")
-        if (response.ok) {
-          const userData = await response.json()
-          setUser(userData.data)
-        } else {
-          setUser(null)
-        }
-      } catch (error) {
-        setUser(null)
-      } finally {
-        setLoading(false)
+    const getInitialUser = async () => {
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser()
+
+      if (error) {
+        console.error("Error getting user:", error)
       }
+
+      setUser(user ?? null)
+
+      if (user) {
+        await fetchProfile(user.id)
+      }
+
+      setLoading(false)
     }
 
-    checkAuth()
+    getInitialUser()
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, _session) => {
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser()
+
+      if (error) {
+        console.error("Error getting user on auth state change:", error)
+      }
+
+      setUser(user ?? null)
+
+      if (user) {
+        await fetchProfile(user.id)
+      } else {
+        setProfile(null)
+      }
+
+      setLoading(false)
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
-  const logout = async () => {
+  const fetchProfile = async (userId: string) => {
     try {
-      await fetch("/api/auth/logout", { method: "POST" })
-      setUser(null)
-      router.push("/auth/login")
+      const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).single()
+
+      if (error) {
+        console.error("Error fetching profile:", error)
+        return
+      }
+
+      setProfile(data)
     } catch (error) {
-      console.error("Logout failed:", error)
+      console.error("Error fetching profile:", error)
+    }
+  }
+
+  const signOut = async () => {
+    const { error } = await supabase.auth.signOut()
+    if (error) {
+      console.error("Error signing out:", error)
+      throw error
     }
   }
 
   return {
     user,
+    profile,
     loading,
+    signOut,
     isAuthenticated: !!user,
-    logout,
+    refreshProfile: () => user && fetchProfile(user.id),
   }
 }

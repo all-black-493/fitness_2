@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Brain, Sparkles, Utensils, DollarSign, Clock, Target, Zap } from "lucide-react"
 import { toast } from "sonner"
-import { useAIPlanner } from "@/hooks/use-api"
+import { useAIPlanner } from "@/hooks/use-ai-planner"
 
 export function AIWorkoutPlanner() {
   const [includeNutrition, setIncludeNutrition] = useState(false)
@@ -83,6 +83,7 @@ export function AIWorkoutPlanner() {
       const plan = await generatePlan({
         ...formData,
         includeNutrition,
+        body_weight: Number(formData.weight) || 0,
       })
       setGeneratedPlan(plan)
       toast.success(`${includeNutrition ? "Workout & Nutrition" : "Workout"} plan generated! 🎉`)
@@ -430,12 +431,12 @@ export function AIWorkoutPlanner() {
               <div className="space-y-1 text-sm text-muted-foreground">
                 <div className="flex items-center space-x-2">
                   <span>• AI-generated workout plan</span>
-                  <Badge variant="outline">$29</Badge>
+                  <Badge variant="outline">${basePlanPrice}</Badge>
                 </div>
                 {includeNutrition && (
                   <div className="flex items-center space-x-2">
                     <span>• Personalized nutrition plan</span>
-                    <Badge variant="outline">+$19</Badge>
+                    <Badge variant="outline">+${nutritionAddon}</Badge>
                   </div>
                 )}
               </div>

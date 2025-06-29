@@ -4,11 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Heart, MessageCircle, Trophy, Dumbbell, Target } from "lucide-react"
-import { useFriendsActivity } from "@/hooks/use-api"
+import { useFriendsActivity } from "@/hooks/use-friends-activity"
 import { Skeleton } from "@/components/ui/skeleton"
 
 export function FriendsActivity() {
-  const { activities, loading } = useFriendsActivity()
+  const { activities, loading, toggleLike } = useFriendsActivity()
 
   const getActivityIcon = (type: string) => {
     switch (type) {
@@ -54,37 +54,49 @@ export function FriendsActivity() {
         <CardTitle>Recent Activity</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {activities.map((activity: any) => (
+        {activities.map((activity) => (
           <div key={activity.id} className="space-y-3">
             <div className="flex items-start space-x-3">
               <Avatar className="h-10 w-10">
-                <AvatarImage src={activity.avatar || "/placeholder.svg"} />
+                <AvatarImage src={activity.profile.avatar_url || "/placeholder.svg"} />
                 <AvatarFallback>
-                  {activity.user
+                  {(activity.profile.display_name || activity.profile.username)
                     .split(" ")
-                    .map((n: string) => n[0])
+                    .map((n) => n[0])
                     .join("")}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center space-x-2">
                   <p className="text-sm">
-                    <span className="font-medium">{activity.user}</span>{" "}
+                    <span className="font-medium">
+                      {activity.profile.display_name || activity.profile.username}
+                    </span>{" "}
                     <span className="text-muted-foreground">{activity.action}</span>
                   </p>
                   {getActivityIcon(activity.type)}
                 </div>
-                <p className="text-sm font-medium text-primary mt-1">{activity.details}</p>
+                {activity.workout?.name && (
+                  <p className="text-sm font-medium text-primary mt-1">
+                    {activity.workout.name}
+                  </p>
+                )}
                 <p className="text-xs text-muted-foreground mt-1">{activity.time}</p>
               </div>
             </div>
 
             <div className="flex items-center justify-between ml-13">
               <div className="flex items-center space-x-4">
-                <Button variant="ghost" size="sm" className={`h-8 ${activity.hasLiked ? "text-red-500" : ""}`}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`h-8 ${activity.hasLiked ? "text-red-500" : ""}`}
+                  onClick={() => toggleLike(activity.id)}
+                >
                   <Heart className={`mr-1 h-4 w-4 ${activity.hasLiked ? "fill-current" : ""}`} />
                   {activity.likes}
                 </Button>
+
                 <Button variant="ghost" size="sm" className="h-8">
                   <MessageCircle className="mr-1 h-4 w-4" />
                   {activity.comments}
@@ -92,7 +104,9 @@ export function FriendsActivity() {
               </div>
             </div>
 
-            {activity.id !== activities[activities.length - 1].id && <div className="border-b border-border ml-13" />}
+            {activity.id !== activities[activities.length - 1].id && (
+              <div className="border-b border-border ml-13" />
+            )}
           </div>
         ))}
       </CardContent>
