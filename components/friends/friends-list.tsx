@@ -20,15 +20,30 @@ import { useFriendsList } from "@/hooks/use-friends-list"
 
 export function FriendsList() {
   const { friends, loading } = useFriendsList()
+  const onlineCount = friends.filter((f) => f.status === "online").length
+
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Your Friends ({friends.length})</CardTitle>
+        <CardTitle>
+          Your Friends ({friends.length})
+          <span className="text-sm font-normal text-muted-foreground ml-1">
+            — {onlineCount} online
+          </span>
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {loading ? (
-          <p className="text-muted-foreground">Loading friends...</p>
+          [...Array(4)].map((_, i) => (
+            <div key={i} className="flex items-center space-x-3 p-3">
+              <div className="h-10 w-10 rounded-full bg-muted animate-pulse" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 w-1/2 bg-muted rounded animate-pulse" />
+                <div className="h-3 w-1/3 bg-muted rounded animate-pulse" />
+              </div>
+            </div>
+          ))
         ) : (
           friends.map((friend) => (
             <div
@@ -40,20 +55,21 @@ export function FriendsList() {
                   <AvatarImage src={friend.avatar_url || "/placeholder.svg"} />
                   <AvatarFallback>
                     {friend.display_name
-                      ?.split(" ")
-                      .map((n) => n[0])
-                      .join("")}
+                      ? friend.display_name.split(" ").map((n) => n[0]).join("")
+                      : "??"}
+
                   </AvatarFallback>
                 </Avatar>
                 <div
-                  className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-background ${
-                    friend.status === "online"
-                      ? "bg-green-500"
-                      : friend.status === "away"
-                        ? "bg-yellow-500"
-                        : "bg-gray-400"
-                  }`}
+                  title={friend.status}
+                  className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-background ${friend.status === "online"
+                    ? "bg-green-500"
+                    : friend.status === "away"
+                      ? "bg-yellow-500"
+                      : "bg-gray-400"
+                    }`}
                 />
+
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{friend.display_name}</p>

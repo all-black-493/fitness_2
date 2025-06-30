@@ -14,6 +14,39 @@ export function useFriendsList() {
   const { user } = useAuth()
   const [friends, setFriends] = useState<Friend[]>([])
   const [loading, setLoading] = useState(true)
+  const [onlineIds, setOnlineIds] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    const supabase = createClient()
+
+    if (!user?.id) return
+
+    const channel = supabase.channel("presence:online-users", {
+      config: { presence: { key: user.id } },
+    })
+
+    channel
+      .on("presence", { event: "sync" }, () => {
+        const state = channel.presenceState()
+        const ids = new Set<string>()
+
+        for (const profileId in state) {
+          if (Object.hasOwn(state, profileId)) {
+            ids.add(profileId)
+          }
+        }
+
+        setOnlineIds(ids)
+      })
+      .subscribe(async (status) => {
+        if (status !== "SUBSCRIBED") return
+        channel.track({})
+      })
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user?.id])
 
   useEffect(() => {
     const fetchFriends = async () => {
@@ -29,9 +62,6 @@ export function useFriendsList() {
             username,
             display_name,
             avatar_url
-          ),
-          workouts(
-            workout_date
           )
         `)
         .eq("profile_id", user.id)
@@ -45,7 +75,7 @@ export function useFriendsList() {
 
       const parsedFriends: Friend[] = data.map((entry: any) => ({
         ...entry.profiles,
-        status: "offline", // Placeholder – can enhance with real-time presence later
+        status: onlineIds.has(entry.friend_id) ? "online" : "offline",
         lastWorkout: entry.workouts?.[0]?.workout_date
           ? new Date(entry.workouts[0].workout_date).toLocaleString()
           : null,
@@ -56,7 +86,7 @@ export function useFriendsList() {
     }
 
     fetchFriends()
-  }, [user?.id])
+  }, [user?.id, onlineIds])
 
   return { friends, loading }
 }

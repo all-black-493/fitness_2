@@ -1,6 +1,7 @@
 import { FriendsHeader } from "@/components/friends/friends-header"
 import { FriendsList } from "@/components/friends/friends-list"
 import { FriendsActivity } from "@/components/friends/friends-activity"
+import { FriendSuggestions } from "@/components/friends/friend-suggestions"
 
 export default function FriendsPage() {
   return (
@@ -14,6 +15,7 @@ export default function FriendsPage() {
           <FriendsActivity />
         </div>
       </div>
+      <FriendSuggestions />
     </div>
   )
 }
