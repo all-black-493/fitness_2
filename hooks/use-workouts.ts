@@ -1,9 +1,16 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/database.types"
 import { useAuth } from "./use-auth"
+
+// Dynamic imports for server actions
+const getUserWorkoutsAction = async () =>
+  (await import("@/lib/actions/workouts")).getUserWorkouts()
+const getWorkoutPlansAction = async () =>
+  (await import("@/lib/actions/workouts")).getWorkoutPlans()
+const createWorkoutAction = async (workout: any) =>
+  (await import("@/lib/actions/workouts")).createWorkout(workout)
 
 type Workout = Database["public"]["Tables"]["workouts"]["Row"]
 type WorkoutPlan = Database["public"]["Tables"]["workout_plans"]["Row"]
@@ -14,32 +21,22 @@ export function useWorkouts() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { user } = useAuth()
-  const supabase = createClient()
-
-  useEffect(() => {
-    if (user) {
-      fetchWorkouts()
-      fetchWorkoutPlans()
-    }
-  }, [user])
 
   const fetchWorkouts = async () => {
-    if (!user) return
+    if (!user) {
+      setWorkouts([])
+      setLoading(false)
+      return
+    }
 
     try {
-      const { data, error } = await supabase
-        .from("workouts")
-        .select("*")
-        .eq("profile_id", user.id)
-        .order("workout_date", { ascending: false })
-
-      if (error) throw error
-
-      setWorkouts(data || [])
+      const data = await getUserWorkoutsAction()
+      setWorkouts(data)
       setError(null)
     } catch (err: any) {
       console.error("Error fetching workouts:", err)
       setError(err.message || "Failed to fetch workouts.")
+      setWorkouts([])
     } finally {
       setLoading(false)
     }
@@ -47,18 +44,13 @@ export function useWorkouts() {
 
   const fetchWorkoutPlans = async () => {
     try {
-      const { data, error } = await supabase
-        .from("workout_plans")
-        .select("*")
-        .order("created_at", { ascending: false })
-
-      if (error) throw error
-
-      setWorkoutPlans(data || [])
+      const data = await getWorkoutPlansAction()
+      setWorkoutPlans(data)
       setError(null)
     } catch (err: any) {
       console.error("Error fetching workout plans:", err)
       setError(err.message || "Failed to fetch workout plans.")
+      setWorkoutPlans([])
     }
   }
 
@@ -66,14 +58,7 @@ export function useWorkouts() {
     if (!user) return
 
     try {
-      const { data, error } = await supabase
-        .from("workouts")
-        .insert([{ ...workout, profile_id: user.id }])
-        .select()
-        .single()
-
-      if (error) throw error
-
+      const data = await createWorkoutAction(workout)
       setWorkouts((prev) => [data, ...prev])
       setError(null)
       return data
@@ -83,6 +68,13 @@ export function useWorkouts() {
       throw err
     }
   }
+
+  useEffect(() => {
+    if (user) {
+      fetchWorkouts()
+      fetchWorkoutPlans()
+    }
+  }, [user])
 
   return {
     workouts,

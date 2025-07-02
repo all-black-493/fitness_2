@@ -1,40 +1,41 @@
 import { useState, useEffect } from "react"
-import { createClient } from "@/lib/supabase/client"
 import { Database } from "@/database.types"
 import debounce from "lodash.debounce"
 
+// Dynamic import for server action
+const searchUsersAction = async (query: string, limit = 10) =>
+  (await import("@/lib/actions/friends")).searchUsers(query, limit)
+
 type Profile = Database["public"]["Tables"]["profiles"]["Row"]
 type SearchResult = Pick<Profile, "id" | "username" | "display_name" | "avatar_url">
-
 
 export function useFriendSearch() {
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!query) {
       setResults([])
+      setError(null)
       return
     }
 
-    const supabase = createClient()
     const fetch = async () => {
       setLoading(true)
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, username, display_name, avatar_url")
-        .ilike("username", `%${query}%`)
-        .limit(10)
+      setError(null)
 
-      if (error) {
-        console.error("Search error:", error)
-        setResults([])
-      } else {
+      try {
+        const data = await searchUsersAction(query, 10)
         setResults(data || [])
+      } catch (err: any) {
+        console.error("Search error:", err)
+        setError(err.message || "Failed to search users")
+        setResults([])
+      } finally {
+        setLoading(false)
       }
-
-      setLoading(false)
     }
 
     const debounced = debounce(fetch, 300)
@@ -43,5 +44,5 @@ export function useFriendSearch() {
     return () => debounced.cancel()
   }, [query])
 
-  return { query, setQuery, results, loading }
+  return { query, setQuery, results, loading, error }
 }

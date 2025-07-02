@@ -1,75 +1,66 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/database.types"
 import { useAuth } from "./use-auth"
 
-type Community = Database["public"]["Tables"]["communities"]["Row"]
+// Dynamic imports for server actions
+const getCommunities = async () => (await import("@/lib/actions/communities")).getCommunities()
+const getUserCommunities = async () => (await import("@/lib/actions/communities")).getUserCommunities()
+const joinCommunityAction = async (communityId: string) => (await import("@/lib/actions/communities")).joinCommunity(communityId)
 
+type Community = Database["public"]["Tables"]["communities"]["Row"]
 
 export function useCommunities() {
   const [communities, setCommunities] = useState<Community[]>([])
   const [userCommunities, setUserCommunities] = useState<Community[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const { user } = useAuth()
-  const supabase = createClient()
 
-  useEffect(() => {
-    fetchCommunities()
-    if (user) {
-      fetchUserCommunities()
-    }
-  }, [user])
-
-  const fetchCommunities = async () => {
+  async function fetchCommunities() {
+    setLoading(true)
+    setError(null)
     try {
-      const { data, error } = await supabase
-        .from("communities")
-        .select("*")
-        .eq("is_private", false)
-        .order("member_count", { ascending: false })
-
-      if (error) throw error
-      setCommunities(data || [])
-    } catch (error) {
-      console.error("Error fetching communities:", error)
+      const data = await getCommunities()
+      setCommunities(data)
+    } catch (err) {
+      setError("Failed to fetch communities")
+      setCommunities([])
     } finally {
       setLoading(false)
     }
   }
 
-  const fetchUserCommunities = async () => {
+  async function fetchUserCommunities() {
     if (!user) return
-
+    setError(null)
     try {
-      const { data, error } = await supabase
-        .from("community_members")
-        .select(`
-          communities (*)
-        `)
-        .eq("user_id", user.id)
-
-      if (error) throw error
-      setUserCommunities(data?.map((item) => item.communities).filter(Boolean) || [])
-    } catch (error) {
-      console.error("Error fetching user communities:", error)
+      const data = await getUserCommunities()
+      setUserCommunities(data)
+    } catch (err) {
+      setError("Failed to fetch user communities")
+      setUserCommunities([])
     }
   }
 
-  const joinCommunity = async (communityId: string) => {
-    if (!user) return
+  useEffect(() => {
+    fetchCommunities()
+    if (user) fetchUserCommunities()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
 
+  async function joinCommunity(communityId: string) {
+    setError(null)
     try {
-      const { error } = await supabase
-        .from("community_members")
-        .insert([{ community_id: communityId, profile_id: user.id }])
-
-      if (error) throw error
+      const result = await joinCommunityAction(communityId)
+      if (result?.error) setError(result.error)
       await fetchUserCommunities()
-    } catch (error) {
-      console.error("Error joining community:", error)
-      throw error
+      await fetchCommunities()
+      return result
+    } catch (err) {
+      setError("Failed to join community")
+      return { error: "Failed to join community" }
     }
   }
 
@@ -77,6 +68,7 @@ export function useCommunities() {
     communities,
     userCommunities,
     loading,
+    error,
     joinCommunity,
     refreshCommunities: fetchCommunities,
     refreshUserCommunities: fetchUserCommunities,

@@ -1,9 +1,16 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/database.types"
 import { useAuth } from "./use-auth"
+
+// Dynamic imports for server actions
+const getNotificationsAction = async (limit = 50) =>
+  (await import("@/lib/actions/notifications")).getNotifications(limit)
+const markNotificationAsReadAction = async (notificationId: string) =>
+  (await import("@/lib/actions/notifications")).markNotificationAsRead(notificationId)
+const markAllNotificationsAsReadAction = async () =>
+  (await import("@/lib/actions/notifications")).markAllNotificationsAsRead()
 
 type Notification = Database["public"]["Tables"]["notifications"]["Row"]
 
@@ -11,53 +18,28 @@ export function useNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const { user } = useAuth()
-  const supabase = createClient()
-
-  useEffect(() => {
-    if (user) {
-      fetchNotifications()
-
-      // Subscribe to real-time notifications
-      const subscription = supabase
-        .channel("notifications")
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "notifications",
-            filter: `profile_id=eq.${user.id}`,
-          },
-          (payload) => {
-            setNotifications((prev) => [payload.new as Notification, ...prev])
-            setUnreadCount((prev) => prev + 1)
-          },
-        )
-        .subscribe()
-
-      return () => {
-        subscription.unsubscribe()
-      }
-    }
-  }, [user])
 
   const fetchNotifications = async () => {
-    if (!user) return
+    if (!user) {
+      setNotifications([])
+      setUnreadCount(0)
+      setLoading(false)
+      return
+    }
+
+    setLoading(true)
+    setError(null)
 
     try {
-      const { data, error } = await supabase
-        .from("notifications")
-        .select("*")
-        .eq("profile_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(50)
-
-      if (error) throw error
-      setNotifications(data || [])
-      setUnreadCount(data?.filter((n) => !n.is_read).length || 0)
-    } catch (error) {
-      console.error("Error fetching notifications:", error)
+      const data = await getNotificationsAction(50)
+      setNotifications(data)
+      setUnreadCount(data.filter((n) => !n.is_read).length)
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch notifications")
+      setNotifications([])
+      setUnreadCount(0)
     } finally {
       setLoading(false)
     }
@@ -65,15 +47,14 @@ export function useNotifications() {
 
   const markAsRead = async (notificationId: string) => {
     try {
-      const { error } = await supabase.from("notifications").update({ is_read: true }).eq("id", notificationId)
+      await markNotificationAsReadAction(notificationId)
 
-      if (error) throw error
-
+      // Optimistically update the UI
       setNotifications((prev) => prev.map((n) => (n.id === notificationId ? { ...n, is_read: true } : n)))
       setUnreadCount((prev) => Math.max(0, prev - 1))
-    } catch (error) {
-      console.error("Error marking notification as read:", error)
-      throw error
+    } catch (err: any) {
+      setError(err.message || "Failed to mark notification as read")
+      throw err
     }
   }
 
@@ -81,26 +62,58 @@ export function useNotifications() {
     if (!user) return
 
     try {
-      const { error } = await supabase
-        .from("notifications")
-        .update({ is_read: true })
-        .eq("profile_id", user.id)
-        .eq("is_read", false)
+      await markAllNotificationsAsReadAction()
 
-      if (error) throw error
-
+      // Optimistically update the UI
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })))
       setUnreadCount(0)
-    } catch (error) {
-      console.error("Error marking all notifications as read:", error)
-      throw error
+    } catch (err: any) {
+      setError(err.message || "Failed to mark all notifications as read")
+      throw err
     }
   }
+
+  useEffect(() => {
+    if (user) {
+      fetchNotifications()
+
+      // Set up realtime subscription for notifications
+      let supabase: any
+      let subscription: any
+
+      import("@/lib/supabase-utils/client").then(({ createClient }) => {
+        supabase = createClient()
+        subscription = supabase
+          .channel("notifications")
+          .on(
+            "postgres_changes",
+            {
+              event: "INSERT",
+              schema: "public",
+              table: "notifications",
+              filter: `profile_id=eq.${user.id}`,
+            },
+            (payload) => {
+              setNotifications((prev) => [payload.new as Notification, ...prev])
+              setUnreadCount((prev) => prev + 1)
+            },
+          )
+          .subscribe()
+      })
+
+      return () => {
+        if (subscription) {
+          subscription.unsubscribe()
+        }
+      }
+    }
+  }, [user])
 
   return {
     notifications,
     unreadCount,
     loading,
+    error,
     markAsRead,
     markAllAsRead,
     refreshNotifications: fetchNotifications,

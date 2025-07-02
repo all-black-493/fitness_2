@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react"
-import { createClient } from "@/lib/supabase/client"
 import { Database } from "@/database.types"
 import { useAuth } from "@/hooks/use-auth"
-import { handleLikeToggle } from "@/lib/mutations/toggle-activity-like"
+
+// Dynamic imports for server actions
+const getFriendActivitiesAction = async (limit = 15) =>
+  (await import("@/lib/actions/workouts")).getFriendActivities(limit)
+const toggleActivityLikeAction = async (activityId: string) =>
+  (await import("@/lib/actions/workouts")).toggleActivityLike(activityId)
 
 type Workout = Database["public"]["Tables"]["workouts"]["Row"]
 type Profile = Database["public"]["Tables"]["profiles"]["Row"]
@@ -24,140 +28,107 @@ export function useFriendsActivity() {
   const { user } = useAuth()
   const [activities, setActivities] = useState<FriendActivity[]>([])
   const [loading, setLoading] = useState(true)
-  const toggleLike = async (activityId: string) => {
-    if (!user) return
-
-    await handleLikeToggle(activityId, user.id)
-
-    setActivities((prev) =>
-      prev.map((activity) => {
-        if (activity.id !== activityId) return activity
-
-        const hasLiked = !activity.hasLiked
-        const likes = hasLiked ? activity.likes + 1 : activity.likes - 1
-
-        return {
-          ...activity,
-          hasLiked,
-          likes,
-        }
-      })
-    )
-  }
+  const [error, setError] = useState<string | null>(null)
 
   const fetchActivities = async () => {
-    const supabase = createClient()
-    if (!user?.id) return
-
-    const { data: friendsData, error: friendsError } = await supabase
-      .from("friends")
-      .select("friend_id")
-      .eq("profile_id", user.id)
-      .eq("status", "accepted")
-
-    if (friendsError) {
-      console.error("Failed to fetch friends", friendsError)
-      setLoading(false)
-      return
-    }
-
-    const friendIds = friendsData?.map((f) => f.friend_id) ?? []
-
-    if (friendIds.length === 0) {
+    if (!user?.id) {
       setActivities([])
       setLoading(false)
       return
     }
 
-    const { data, error } = await supabase
-      .from("activities")
-      .select(`
-          id,
-          action,
-          type,
-          created_at,
-          workout:workouts (
-            id,
-            name,
-            workout_date,
-            calories_burned,
-            duration_minutes,
-            tags,
-            completed,
-            notes,
-            profile_id,
-            created_at,
-            exercises
-          ),
-          profile:profiles (
-            id,
-            username,
-            avatar_url,
-            display_name
-          ),
-          activity_likes(count),
-          activity_likes(user_has_liked:profile_id),
-          activity_comments(count)
-        `)
-      .in("profile_id", friendIds)
-      .order("created_at", { ascending: false })
-      .limit(15)
+    setLoading(true)
+    setError(null)
 
-    if (error) {
-      console.error("Error fetching friend activities:", error)
+    try {
+      const data = await getFriendActivitiesAction(15)
+
+      const formatted: FriendActivity[] = data.map((activity: any) => ({
+        id: activity.id,
+        workout: activity.workout ?? null,
+        profile: activity.profile,
+        action: activity.action,
+        time: new Date(activity.created_at).toLocaleString(),
+        type: activity.type,
+        likes: activity.activity_likes?.[0]?.count ?? 0,
+        comments: activity.activity_comments?.[0]?.count ?? 0,
+        hasLiked:
+          Array.isArray(activity.activity_likes?.user_has_liked) &&
+          activity.activity_likes.user_has_liked.some(
+            (like: any) => like.profile_id === user.id
+          ),
+      }))
+
+      setActivities(formatted)
+    } catch (err: any) {
+      setError(err.message || "Failed to fetch friend activities")
+      setActivities([])
+    } finally {
       setLoading(false)
-      return
     }
+  }
 
-    const formatted: FriendActivity[] = data.map((activity: any) => ({
-      id: activity.id,
-      workout: activity.workout ?? null,
-      profile: activity.profile,
-      action: activity.action,
-      time: new Date(activity.created_at).toLocaleString(),
-      type: activity.type,
-      likes: activity.activity_likes?.[0]?.count ?? 0,
-      comments: activity.activity_comments?.[0]?.count ?? 0,
-      hasLiked:
-        Array.isArray(activity.activity_likes?.user_has_liked) &&
-        activity.activity_likes.user_has_liked.some(
-          (like: any) => like.profile_id === user.id
-        ),
-    }))
+  const toggleLike = async (activityId: string) => {
+    if (!user) return
 
-    setActivities(formatted)
-    setLoading(false)
+    try {
+      await toggleActivityLikeAction(activityId)
+
+      // Optimistically update the UI
+      setActivities((prev) =>
+        prev.map((activity) => {
+          if (activity.id !== activityId) return activity
+
+          const hasLiked = !activity.hasLiked
+          const likes = hasLiked ? activity.likes + 1 : activity.likes - 1
+
+          return {
+            ...activity,
+            hasLiked,
+            likes,
+          }
+        })
+      )
+    } catch (err: any) {
+      setError(err.message || "Failed to toggle like")
+    }
   }
 
   useEffect(() => {
-
     fetchActivities()
 
-    const supabase = createClient()
+    // Set up realtime subscription for activities
+    let supabase: any
+    let channel: any
 
-    const channel = supabase
-      .channel("realtime:activities")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "activities" },
-        fetchActivities
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "activity_likes" },
-        fetchActivities
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "activity_comments" },
-        fetchActivities
-      )
-      .subscribe()
+    import("@/lib/supabase-utils/client").then(({ createClient }) => {
+      supabase = createClient()
+      channel = supabase
+        .channel("realtime:activities")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "activities" },
+          fetchActivities
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "activity_likes" },
+          fetchActivities
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "activity_comments" },
+          fetchActivities
+        )
+        .subscribe()
+    })
 
     return () => {
-      supabase.removeChannel(channel)
+      if (supabase && channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [user?.id])
 
-  return { activities, loading, toggleLike }
+  return { activities, loading, error, toggleLike }
 }

@@ -10,16 +10,17 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from "sonner"
 import { RegisterSchema, type RegisterInput } from "@/lib/validations/auth"
 import { registerAction } from "@/lib/actions/auth"
 import { Dumbbell, Eye, EyeOff, Loader2, Check, X } from "lucide-react"
+
+// Adapter to map FormData to registerAction input
 
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
-  const { toast } = useToast()
 
   const form = useForm<RegisterInput>({
     resolver: zodResolver(RegisterSchema),
@@ -55,16 +56,11 @@ export default function RegisterPage() {
       const result = await registerAction(data)
 
       if (result?.data?.success) {
-        toast({
-          title: "Welcome to FitLogger!",
-          description: result.data.success,
-        })
+        toast.success("Welcome to FitLogger!")
         router.push("/")
       } else if (result?.data?.error) {
-        toast({
-          title: "Registration failed",
+        toast.error("Registration failed", {
           description: result.data.error,
-          variant: "destructive",
         })
       }
     })
@@ -87,17 +83,45 @@ export default function RegisterPage() {
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="username">Username</Label>
-              <Input id="username" placeholder="johndoe" {...form.register("username")} disabled={isPending} />
+              <Input
+                id="username"
+                placeholder="johndoe"
+                {...form.register("username")}
+                disabled={isPending}
+                aria-invalid={!!form.formState.errors.username}
+                aria-describedby={form.formState.errors.username ? 'username-error' : undefined}
+              />
               {form.formState.errors.username && (
-                <p className="text-sm text-destructive">{form.formState.errors.username.message}</p>
+                <p
+                  id="username-error"
+                  className="text-sm text-destructive"
+                  aria-live="polite"
+                  role="alert"
+                >
+                  {form.formState.errors.username.message}
+                </p>
               )}
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="name">Full Name</Label>
-              <Input id="name" placeholder="John Doe" {...form.register("name")} disabled={isPending} />
+              <Input
+                id="name"
+                placeholder="John Doe"
+                {...form.register("name")}
+                disabled={isPending}
+                aria-invalid={!!form.formState.errors.name}
+                aria-describedby={form.formState.errors.name ? 'name-error' : undefined}
+              />
               {form.formState.errors.name && (
-                <p className="text-sm text-destructive">{form.formState.errors.name.message}</p>
+                <p
+                  id="name-error"
+                  className="text-sm text-destructive"
+                  aria-live="polite"
+                  role="alert"
+                >
+                  {form.formState.errors.name.message}
+                </p>
               )}
             </div>
 
@@ -109,9 +133,18 @@ export default function RegisterPage() {
                 placeholder="john@example.com"
                 {...form.register("email")}
                 disabled={isPending}
+                aria-invalid={!!form.formState.errors.email}
+                aria-describedby={form.formState.errors.email ? 'email-error' : undefined}
               />
               {form.formState.errors.email && (
-                <p className="text-sm text-destructive">{form.formState.errors.email.message}</p>
+                <p
+                  id="email-error"
+                  className="text-sm text-destructive"
+                  aria-live="polite"
+                  role="alert"
+                >
+                  {form.formState.errors.email.message}
+                </p>
               )}
             </div>
 
@@ -124,6 +157,8 @@ export default function RegisterPage() {
                   placeholder="Create a strong password"
                   {...form.register("password")}
                   disabled={isPending}
+                  aria-invalid={!!form.formState.errors.password}
+                  aria-describedby={form.formState.errors.password ? 'password-error' : undefined}
                 />
                 <Button
                   type="button"
@@ -185,7 +220,14 @@ export default function RegisterPage() {
               )}
 
               {form.formState.errors.password && (
-                <p className="text-sm text-destructive">{form.formState.errors.password.message}</p>
+                <p
+                  id="password-error"
+                  className="text-sm text-destructive"
+                  aria-live="polite"
+                  role="alert"
+                >
+                  {form.formState.errors.password.message}
+                </p>
               )}
             </div>
 

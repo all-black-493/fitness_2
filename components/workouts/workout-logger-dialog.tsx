@@ -8,8 +8,9 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
-import { Plus, Minus, X, Users } from "lucide-react"
-import axios from "axios";
+import { Plus, Minus, X, Users, Loader2 } from "lucide-react"
+import { useWorkouts } from "@/hooks/use-workouts"
+import { z } from "zod"
 
 interface Exercise {
   id: string
@@ -27,11 +28,34 @@ interface WorkoutLoggerDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
+const WorkoutSchema = z.object({
+  name: z.string().min(2, "Workout name is required"),
+  workout_date: z.string().min(1, "Date is required"),
+  exercises: z
+    .array(
+      z.object({
+        name: z.string().min(1, "Exercise name is required"),
+        sets: z.array(
+          z.object({
+            reps: z.number().min(0),
+            weight: z.number().min(0).optional(),
+            distance: z.number().min(0).optional(),
+            time: z.string().optional(),
+          })
+        ).min(1, "At least one set required"),
+      })
+    )
+    .min(1, "At least one exercise required"),
+})
+
 export function WorkoutLoggerDialog({ open, onOpenChange }: WorkoutLoggerDialogProps) {
   const [workoutName, setWorkoutName] = useState("")
   const [workoutDate, setWorkoutDate] = useState(new Date().toISOString().split("T")[0])
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [taggedFriends, setTaggedFriends] = useState<string[]>([])
+  const [formError, setFormError] = useState("")
+  const [isSaving, setIsSaving] = useState(false)
+  const { addWorkout, refreshWorkouts } = useWorkouts()
 
   const addExercise = () => {
     const newExercise: Exercise = {
@@ -67,41 +91,55 @@ export function WorkoutLoggerDialog({ open, onOpenChange }: WorkoutLoggerDialogP
       exercises.map((ex) =>
         ex.id === exerciseId
           ? {
-              ...ex,
-              sets: ex.sets.map((set, i) => (i === setIndex ? { ...set, [field]: value } : set)),
-            }
+            ...ex,
+            sets: ex.sets.map((set, i) => (i === setIndex ? { ...set, [field]: value } : set)),
+          }
           : ex,
       ),
     )
   }
 
   const handleSave = async () => {
-  const payload = {
-    name: workoutName,
-    date: workoutDate,
-    exercises: exercises.map((ex) => ({
-      name: ex.name,
-      sets: ex.sets.map((set) => ({
-        reps: set.reps,
-        weight: set.weight,
-        distance: set.distance,
-        time: set.time,
+    setFormError("")
+    const payload = {
+      name: workoutName,
+      workout_date: workoutDate,
+      exercises: exercises.map((ex) => ({
+        name: ex.name,
+        sets: ex.sets.map((set) => ({
+          reps: Number(set.reps) || 0,
+          weight: Number(set.weight) || 0,
+          distance: Number(set.distance) || 0,
+          time: set.time || "",
+        })),
       })),
-    })),
-    taggedFriends,
-  };
-
-  try {
-    const res = await axios.post("http://localhost:3000/api/workouts", payload);
-    console.log("Workout saved!", res.data);
-    onOpenChange(false);
-    setWorkoutName("");
-    setExercises([]);
-    setTaggedFriends([]);
-  } catch (err) {
-    console.error("Failed to save workout", err);
+    }
+    const result = WorkoutSchema.safeParse(payload)
+    if (!result.success) {
+      setFormError(result.error.errors[0]?.message || "Invalid input")
+      return
+    }
+    setIsSaving(true)
+    try {
+      await addWorkout({
+        name: payload.name,
+        workout_date: payload.workout_date,
+        exercises: payload.exercises,
+        duration_minutes: 0, // You may want to calculate this
+        type: "", // You may want to infer or select this
+        completed: true,
+      })
+      await refreshWorkouts()
+      onOpenChange(false)
+      setWorkoutName("")
+      setExercises([])
+      setTaggedFriends([])
+    } catch (err) {
+      setFormError("Failed to save workout. Please try again.")
+    } finally {
+      setIsSaving(false)
+    }
   }
-};
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -109,8 +147,13 @@ export function WorkoutLoggerDialog({ open, onOpenChange }: WorkoutLoggerDialogP
         <DialogHeader>
           <DialogTitle>Log Workout</DialogTitle>
         </DialogHeader>
-
-        <div className="space-y-6">
+        <form
+          onSubmit={e => {
+            e.preventDefault()
+            handleSave()
+          }}
+          className="space-y-6"
+        >
           {/* Workout Details */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -120,7 +163,12 @@ export function WorkoutLoggerDialog({ open, onOpenChange }: WorkoutLoggerDialogP
                 placeholder="e.g., Upper Body Strength"
                 value={workoutName}
                 onChange={(e) => setWorkoutName(e.target.value)}
+                aria-invalid={!!formError && !workoutName}
+                aria-describedby={formError && !workoutName ? 'workout-name-error' : undefined}
               />
+              {formError && !workoutName && (
+                <p id="workout-name-error" className="text-sm text-destructive" aria-live="polite" role="alert">{formError}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="workout-date">Date</Label>
@@ -129,7 +177,12 @@ export function WorkoutLoggerDialog({ open, onOpenChange }: WorkoutLoggerDialogP
                 type="date"
                 value={workoutDate}
                 onChange={(e) => setWorkoutDate(e.target.value)}
+                aria-invalid={!!formError && !workoutDate}
+                aria-describedby={formError && !workoutDate ? 'workout-date-error' : undefined}
               />
+              {formError && !workoutDate && (
+                <p id="workout-date-error" className="text-sm text-destructive" aria-live="polite" role="alert">{formError}</p>
+              )}
             </div>
           </div>
 
@@ -249,13 +302,12 @@ export function WorkoutLoggerDialog({ open, onOpenChange }: WorkoutLoggerDialogP
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end space-x-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+          <div className="flex justify-end">
+            <Button type="submit" disabled={isSaving}>
+              {isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</> : "Save Workout"}
             </Button>
-            <Button onClick={handleSave}>Save Workout</Button>
           </div>
-        </div>
+        </form>
       </DialogContent>
     </Dialog>
   )

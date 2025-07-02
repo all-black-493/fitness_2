@@ -7,11 +7,13 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Progress } from "@/components/ui/progress"
 import { Trophy, Users, Calendar } from "lucide-react"
 import Link from "next/link"
-import { useChallenges } from "@/hooks/use-api"
+import { useChallenges } from "@/hooks/use-challenges"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useState } from "react"
 
 export function ChallengeGrid() {
-  const { challenges, loading } = useChallenges()
+  const { challenges, loading, joinChallenge, refreshChallenges } = useChallenges()
+  const [joiningId, setJoiningId] = useState<string | null>(null)
 
   if (loading) {
     return (
@@ -58,8 +60,8 @@ export function ChallengeGrid() {
             <div className="flex items-start justify-between">
               <div className="space-y-2">
                 <CardTitle className="flex items-center space-x-2">
-                  <span>{challenge.name}</span>
-                  <Badge variant="outline">{challenge.category}</Badge>
+                  <span>{challenge.title}</span>
+                  <Badge variant="outline">{challenge.type}</Badge>
                 </CardTitle>
                 <p className="text-sm text-muted-foreground">{challenge.description}</p>
               </div>
@@ -72,11 +74,11 @@ export function ChallengeGrid() {
               <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-1">
                   <Users className="h-4 w-4" />
-                  <span>{challenge.participants} joined</span>
+                  <span>{challenge.participants_count || 0} joined</span>
                 </div>
                 <div className="flex items-center space-x-1">
                   <Calendar className="h-4 w-4" />
-                  <span>{challenge.daysLeft} days left</span>
+                  <span>{Math.max(0, Math.ceil((new Date(challenge.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))} days left</span>
                 </div>
               </div>
               <Badge
@@ -90,11 +92,12 @@ export function ChallengeGrid() {
                         : "destructive"
                 }
               >
-                {challenge.difficulty}
+                {challenge.difficulty || "Unknown"}
               </Badge>
             </div>
 
-            {/* Progress */}
+            {/* Progress (optional, if you want to show user progress) */}
+            {/*
             {challenge.isJoined && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
@@ -104,40 +107,33 @@ export function ChallengeGrid() {
                 <Progress value={challenge.progress} />
               </div>
             )}
-
-            {/* Leaderboard Preview */}
-            <div className="space-y-2">
-              <h4 className="text-sm font-medium">Leaderboard</h4>
-              <div className="space-y-2">
-                {challenge.leaderboard.slice(0, 3).map((leader: any, index: number) => (
-                  <div key={index} className="flex items-center justify-between text-sm">
-                    <div className="flex items-center space-x-2">
-                      <Badge variant="outline" className="w-6 h-6 p-0 flex items-center justify-center">
-                        {index + 1}
-                      </Badge>
-                      <Avatar className="h-6 w-6">
-                        <AvatarImage src={leader.avatar || "/placeholder.svg"} />
-                        <AvatarFallback>
-                          {leader.name
-                            .split(" ")
-                            .map((n: string) => n[0])
-                            .join("")}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className={leader.name === "You" ? "font-medium text-primary" : ""}>{leader.name}</span>
-                    </div>
-                    <span className="font-medium">{leader.time || leader.steps || leader.count || leader.streak}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            */}
 
             {/* Action Button */}
-            <Link href={`/challenges/${challenge.id}`}>
-              <Button className="w-full" variant={challenge.isJoined ? "outline" : "default"}>
-                {challenge.isJoined ? "View Challenge" : "Join Challenge"}
+            {challenge.isJoined ? (
+              <Link href={`/challenges/${challenge.id}`}>
+                <Button className="w-full" variant="outline">
+                  View Challenge
+                </Button>
+              </Link>
+            ) : (
+              <Button
+                className="w-full"
+                variant="default"
+                disabled={joiningId === challenge.id}
+                formAction={async () => {
+                  setJoiningId(challenge.id)
+                  try {
+                    await joinChallenge(challenge.id)
+                    await refreshChallenges()
+                  } finally {
+                    setJoiningId(null)
+                  }
+                }}
+              >
+                {joiningId === challenge.id ? "Joining..." : "Join Challenge"}
               </Button>
-            </Link>
+            )}
           </CardContent>
         </Card>
       ))}

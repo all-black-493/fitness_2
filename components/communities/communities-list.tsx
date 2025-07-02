@@ -6,11 +6,20 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Users, MessageSquare, TrendingUp } from "lucide-react"
 import Link from "next/link"
-import { useCommunities } from "@/hooks/use-api"
+import { useCommunities } from "@/hooks/use-communities"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ErrorBoundary } from "@/components/error-boundary"
+import React, { useState, useEffect } from "react"
 
 export function CommunitiesList() {
   const { communities, loading } = useCommunities()
+  const [error, setError] = useState<string | null>(null)
+
+  // Optionally, you could enhance useCommunities to return error, but for now, catch errors here
+  useEffect(() => {
+    // Simulate error detection if needed
+    // setError('Failed to load communities.')
+  }, [])
 
   if (loading) {
     return (
@@ -40,78 +49,94 @@ export function CommunitiesList() {
     )
   }
 
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      {communities.map((community: any) => (
-        <Card key={community.id} className="hover:shadow-lg transition-shadow">
-          <CardHeader>
-            <div className="flex items-start space-x-4">
-              <Avatar className="h-12 w-12">
-                <AvatarImage src={community.avatar || "/placeholder.svg"} />
-                <AvatarFallback>
-                  {community.name
-                    .split(" ")
-                    .map((n: string) => n[0])
-                    .join("")}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0">
-                <CardTitle className="flex items-center space-x-2">
-                  <span className="truncate">{community.name}</span>
-                  <Badge variant="outline">{community.category}</Badge>
-                </CardTitle>
-                <p className="text-sm text-muted-foreground mt-1">{community.description}</p>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Community Stats */}
-            <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-              <div className="flex items-center space-x-1">
-                <Users className="h-4 w-4" />
-                <span>{community.members.toLocaleString()} members</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <MessageSquare className="h-4 w-4" />
-                <span>{community.posts} posts</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <TrendingUp className="h-4 w-4" />
-                <span>Active</span>
-              </div>
-            </div>
+  if (error) {
+    return (
+      <div className="text-destructive text-sm p-4" role="alert">{error}</div>
+    )
+  }
 
-            {/* Recent Post Preview */}
-            <div className="bg-accent/50 rounded-lg p-3">
-              <div className="flex items-center space-x-2 mb-2">
-                <Avatar className="h-6 w-6">
-                  <AvatarFallback className="text-xs">
-                    {community.recentPost.author
+  if (!communities.length) {
+    return (
+      <div className="text-muted-foreground text-sm p-4">No communities found. Be the first to create one!</div>
+    )
+  }
+
+  return (
+    <ErrorBoundary>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {communities.map((community: any) => (
+          <Card key={community.id} className="hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <div className="flex items-start space-x-4">
+                <Avatar className="h-12 w-12">
+                  <AvatarImage src={community.avatar || "/placeholder.svg"} />
+                  <AvatarFallback>
+                    {community.name
                       .split(" ")
                       .map((n: string) => n[0])
                       .join("")}
                   </AvatarFallback>
                 </Avatar>
-                <span className="text-sm font-medium">{community.recentPost.author}</span>
-                <span className="text-xs text-muted-foreground">{community.recentPost.time}</span>
-              </div>
-              <p className="text-sm">{community.recentPost.content}</p>
-              <div className="flex items-center space-x-2 mt-2">
-                <div className="flex items-center space-x-1 text-xs text-muted-foreground">
-                  <span>❤️ {community.recentPost.likes}</span>
+                <div className="flex-1 min-w-0">
+                  <CardTitle className="flex items-center space-x-2">
+                    <span className="truncate">{community.name}</span>
+                    <Badge variant="outline">{community.category}</Badge>
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">{community.description}</p>
                 </div>
               </div>
-            </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Community Stats */}
+              <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                <div className="flex items-center space-x-1">
+                  <Users className="h-4 w-4" />
+                  <span>{community.members?.toLocaleString?.() ?? 0} members</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <MessageSquare className="h-4 w-4" />
+                  <span>{community.posts ?? 0} posts</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <TrendingUp className="h-4 w-4" />
+                  <span>Active</span>
+                </div>
+              </div>
 
-            {/* Action Button */}
-            <Link href={`/communities/${community.id}`}>
-              <Button className="w-full" variant={community.isJoined ? "outline" : "default"}>
-                {community.isJoined ? "View Community" : "Join Community"}
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
+              {/* Recent Post Preview */}
+              {community.recentPost && (
+                <div className="bg-accent/50 rounded-lg p-3">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <Avatar className="h-6 w-6">
+                      <AvatarFallback className="text-xs">
+                        {community.recentPost.author
+                          .split(" ")
+                          .map((n: string) => n[0])
+                          .join("")}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm font-medium">{community.recentPost.author}</span>
+                    <span className="text-xs text-muted-foreground">{community.recentPost.time}</span>
+                  </div>
+                  <p className="text-sm">{community.recentPost.content}</p>
+                  <div className="flex items-center space-x-2 mt-2">
+                    <div className="flex items-center space-x-1 text-xs text-muted-foreground">
+                      <span>❤️ {community.recentPost.likes}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Button */}
+              <Link href={`/communities/${community.id}`}>
+                <Button className="w-full" variant={community.isJoined ? "outline" : "default"}>
+                  {community.isJoined ? "View Community" : "Join Community"}
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </ErrorBoundary>
   )
 }

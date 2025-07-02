@@ -13,11 +13,24 @@ import { Separator } from "@/components/ui/separator"
 import { Brain, Sparkles, Utensils, DollarSign, Clock, Target, Zap } from "lucide-react"
 import { toast } from "sonner"
 import { useAIPlanner } from "@/hooks/use-ai-planner"
+import { LoadingSkeleton } from "@/components/ui/loading-skeleton"
+import dynamic from "next/dynamic"
+import rehypeRaw from 'rehype-raw'
+import rehypeHighlight from 'rehype-highlight'
+import rehypeSlug from 'rehype-slug'
+import rehypeAutolinkHeadings from 'rehype-autolink-headings'
+import { useAuth } from '@/hooks/use-auth'
+
+// Dynamic import for server action
+const saveAIWorkoutPlanAction = async (planData: any) =>
+  (await import("@/lib/actions/ai-planner")).saveAIWorkoutPlan(planData)
+
+const ReactMarkdown = dynamic(() => import('react-markdown'), { ssr: false })
 
 export function AIWorkoutPlanner() {
   const [includeNutrition, setIncludeNutrition] = useState(false)
-  const [generatedPlan, setGeneratedPlan] = useState<any>(null)
-  const { generatePlan, loading } = useAIPlanner()
+  const [generatedPlan, setGeneratedPlan] = useState<string | null>(null)
+  const { generatePlan, loading, error, streamingPlan } = useAIPlanner()
   const [formData, setFormData] = useState({
     fitnessLevel: "",
     goals: [] as string[],
@@ -30,6 +43,10 @@ export function AIWorkoutPlanner() {
     weight: "",
     height: "",
   })
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveSuccess, setSaveSuccess] = useState(false)
+  const { user } = useAuth()
 
   const fitnessLevels = [
     { value: "beginner", label: "Beginner", description: "New to fitness or returning after a break" },
@@ -75,10 +92,8 @@ export function AIWorkoutPlanner() {
 
   const handleGeneratePlan = async () => {
     if (!formData.fitnessLevel || formData.goals.length === 0 || !formData.workoutDays) {
-      toast.error("Please fill in the required fields")
       return
     }
-
     try {
       const plan = await generatePlan({
         ...formData,
@@ -86,15 +101,60 @@ export function AIWorkoutPlanner() {
         body_weight: Number(formData.weight) || 0,
       })
       setGeneratedPlan(plan)
-      toast.success(`${includeNutrition ? "Workout & Nutrition" : "Workout"} plan generated! 🎉`)
-    } catch (error) {
-      toast.error("Failed to generate plan")
+      setSaveSuccess(false)
+      setSaveError(null)
+    } catch { }
+  }
+
+  const handleSavePlan = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user) {
+      setSaveError('You must be logged in to save plans.')
+      return
+    }
+    if (!generatedPlan) return
+    setIsSaving(true)
+    setSaveError(null)
+    setSaveSuccess(false)
+    try {
+      await saveAIWorkoutPlanAction({
+        fitness_level: formData.fitnessLevel,
+        goals: formData.goals,
+        workout_days: Number(formData.workoutDays),
+        session_duration: Number(formData.sessionDuration),
+        equipment: formData.equipment,
+        injuries_limitations: formData.injuries || null,
+        nutrition_plan: includeNutrition,
+        body_weight: Number(formData.weight) || null,
+        generated_plan: generatedPlan,
+      })
+      setSaveSuccess(true)
+    } catch (err: any) {
+      setSaveError(err.message || 'Failed to save plan.')
+    } finally {
+      setIsSaving(false)
     }
   }
 
   const basePlanPrice = 29
   const nutritionAddon = 19
   const totalPrice = basePlanPrice + (includeNutrition ? nutritionAddon : 0)
+
+  if (loading && streamingPlan) {
+    return (
+      <Card className="w-full max-w-4xl mx-auto">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl flex items-center justify-center space-x-2">
+            <Sparkles className="h-6 w-6 text-yellow-500" />
+            <span>Generating Your AI Workout Plan...</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="prose max-w-none">
+          <ReactMarkdown rehypePlugins={[rehypeRaw, rehypeHighlight, rehypeSlug, rehypeAutolinkHeadings]}>{streamingPlan}</ReactMarkdown>
+        </CardContent>
+      </Card>
+    )
+  }
 
   if (generatedPlan) {
     return (
@@ -105,128 +165,25 @@ export function AIWorkoutPlanner() {
             <span>Your AI-Generated Workout Plan</span>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Plan Overview */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card>
-              <CardContent className="p-4 text-center">
-                <h3 className="font-semibold">Fitness Level</h3>
-                <Badge className="mt-2">{generatedPlan.fitnessLevel}</Badge>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <h3 className="font-semibold">Workout Days</h3>
-                <p className="text-2xl font-bold mt-2">{generatedPlan.workoutDays}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <h3 className="font-semibold">Session Duration</h3>
-                <p className="text-2xl font-bold mt-2">{generatedPlan.sessionDuration} min</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Workouts */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Your Workouts</h3>
-            {generatedPlan.workouts.map((workout: any, index: number) => (
-              <Card key={index}>
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
-                    <Badge variant="outline">Day {workout.day}</Badge>
-                    <span>{workout.name}</span>
-                    <Badge variant="secondary">{workout.duration} min</Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {workout.exercises.map((exercise: any, exIndex: number) => (
-                      <div key={exIndex} className="border-l-4 border-l-primary pl-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="font-medium">{exercise.name}</h4>
-                          <div className="flex space-x-2 text-sm text-muted-foreground">
-                            <span>{exercise.sets} sets</span>
-                            <span>•</span>
-                            <span>{exercise.reps} reps</span>
-                            <span>•</span>
-                            <span>{exercise.rest} rest</span>
-                          </div>
-                        </div>
-                        <p className="text-sm text-muted-foreground">{exercise.instructions}</p>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {/* Nutrition Plan */}
-          {generatedPlan.nutritionPlan && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold flex items-center space-x-2">
-                <Utensils className="h-5 w-5 text-green-500" />
-                <span>Nutrition Plan</span>
-              </h3>
-              <Card>
-                <CardContent className="p-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <h4 className="font-medium mb-3">Daily Targets</h4>
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <span>Calories:</span>
-                          <span className="font-medium">{generatedPlan.nutritionPlan.dailyCalories}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Protein:</span>
-                          <span className="font-medium">{generatedPlan.nutritionPlan.macros.protein}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Carbs:</span>
-                          <span className="font-medium">{generatedPlan.nutritionPlan.macros.carbs}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Fats:</span>
-                          <span className="font-medium">{generatedPlan.nutritionPlan.macros.fats}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div>
-                      <h4 className="font-medium mb-3">Sample Meals</h4>
-                      <div className="space-y-2">
-                        {generatedPlan.nutritionPlan.meals.map((meal: any, index: number) => (
-                          <div key={index} className="border rounded-lg p-3">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <h5 className="font-medium">{meal.name}</h5>
-                                <p className="text-sm text-muted-foreground">{meal.description}</p>
-                              </div>
-                              <Badge variant="outline">{meal.calories} cal</Badge>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="flex justify-center space-x-4">
+        <CardContent className="prose max-w-none">
+          <ReactMarkdown rehypePlugins={[rehypeRaw, rehypeHighlight, rehypeSlug, rehypeAutolinkHeadings]}>{generatedPlan}</ReactMarkdown>
+          <div className="flex flex-col md:flex-row justify-center items-center gap-4 mt-8">
             <Button onClick={() => setGeneratedPlan(null)} variant="outline">
               Generate New Plan
             </Button>
-            <Button>Save to My Plans</Button>
+            <Button onClick={handleSavePlan} disabled={isSaving || saveSuccess} variant="default">
+              {isSaving ? 'Saving...' : saveSuccess ? 'Saved!' : 'Save to My Plans'}
+            </Button>
+            <a href="/profile/me" className="underline text-primary text-sm ml-2">View My Plans</a>
           </div>
+          {saveError && <div className="mt-4 p-2 bg-red-100 text-red-700 rounded" role="alert">{saveError}</div>}
+          {saveSuccess && <div className="mt-4 p-2 bg-green-100 text-green-700 rounded" role="status">Plan saved successfully!</div>}
         </CardContent>
       </Card>
     )
   }
+
+  if (loading) return <LoadingSkeleton className="w-full max-w-4xl mx-auto h-96" />
 
   return (
     <Card className="w-full max-w-4xl mx-auto">
@@ -242,6 +199,16 @@ export function AIWorkoutPlanner() {
       </CardHeader>
 
       <CardContent className="space-y-8">
+        {error && (
+          <div
+            className="mb-4 p-3 rounded bg-red-100 text-red-700 border border-red-300"
+            role="alert"
+            aria-live="assertive"
+            tabIndex={-1}
+          >
+            {error}
+          </div>
+        )}
         {/* Fitness Level */}
         <div className="space-y-4">
           <Label className="text-base font-semibold">Fitness Level *</Label>
@@ -249,9 +216,8 @@ export function AIWorkoutPlanner() {
             {fitnessLevels.map((level) => (
               <Card
                 key={level.value}
-                className={`cursor-pointer transition-all hover:shadow-md ${
-                  formData.fitnessLevel === level.value ? "border-primary bg-primary/5" : ""
-                }`}
+                className={`cursor-pointer transition-all hover:shadow-md ${formData.fitnessLevel === level.value ? "border-primary bg-primary/5" : ""
+                  }`}
                 onClick={() => setFormData((prev) => ({ ...prev, fitnessLevel: level.value }))}
               >
                 <CardContent className="p-4 text-center">
@@ -270,9 +236,8 @@ export function AIWorkoutPlanner() {
             {fitnessGoals.map((goal) => (
               <div
                 key={goal.id}
-                className={`flex items-center space-x-3 p-3 rounded-lg border cursor-pointer transition-all hover:bg-accent/50 ${
-                  formData.goals.includes(goal.id) ? "border-primary bg-primary/5" : ""
-                }`}
+                className={`flex items-center space-x-3 p-3 rounded-lg border cursor-pointer transition-all hover:bg-accent/50 ${formData.goals.includes(goal.id) ? "border-primary bg-primary/5" : ""
+                  }`}
                 onClick={() => handleGoalToggle(goal.id)}
               >
                 <Checkbox checked={formData.goals.includes(goal.id)} onChange={() => handleGoalToggle(goal.id)} />
@@ -329,9 +294,8 @@ export function AIWorkoutPlanner() {
             {equipmentOptions.map((equipment) => (
               <div
                 key={equipment}
-                className={`flex items-center space-x-2 p-3 rounded-lg border cursor-pointer transition-all hover:bg-accent/50 ${
-                  formData.equipment.includes(equipment) ? "border-primary bg-primary/5" : ""
-                }`}
+                className={`flex items-center space-x-2 p-3 rounded-lg border cursor-pointer transition-all hover:bg-accent/50 ${formData.equipment.includes(equipment) ? "border-primary bg-primary/5" : ""
+                  }`}
                 onClick={() => handleEquipmentToggle(equipment)}
               >
                 <Checkbox

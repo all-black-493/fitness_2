@@ -1,70 +1,9 @@
-import { createServerClient } from "@supabase/ssr"
-import { NextResponse, type NextRequest } from "next/server"
+import { type NextRequest } from "next/server"
+import { updateSession } from "@/lib/supabase-utils/middleware"
 
-export async function middleware(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({
-    request,
-  })
+export async function middleware(request: NextRequest) {  
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          supabaseResponse = NextResponse.next({
-            request,
-          })
-          cookiesToSet.forEach(({ name, value, options }) => supabaseResponse.cookies.set(name, value, options))
-        },
-      },
-    },
-  )
-
-  // Refresh session if expired
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  // Protected routes
-  const protectedPaths = [
-    "/",
-    "/workouts",
-    "/challenges",
-    "/friends",
-    "/communities",
-    "/trainers",
-    "/settings",
-    "/ai-planner",
-    "/store",
-    "/notifications",
-    "/profile",
-  ]
-
-  // Auth routes
-  const authPaths = ["/auth/login", "/auth/register"]
-
-  const { pathname } = request.nextUrl
-
-  // Redirect authenticated users away from auth pages
-  if (user && authPaths.includes(pathname)) {
-    const redirectUrl = request.nextUrl.clone()
-    redirectUrl.pathname = "/"
-    return NextResponse.redirect(redirectUrl)
-  }
-
-  // Redirect unauthenticated users to sign in
-  if (!user && protectedPaths.includes(pathname)) {
-    const redirectUrl = request.nextUrl.clone()
-    redirectUrl.pathname = "/auth/login"
-    return NextResponse.redirect(redirectUrl)
-  }
-
-  return supabaseResponse
+  return await updateSession(request)
 }
 
 export const config = {

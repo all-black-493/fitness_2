@@ -26,6 +26,10 @@ export const MagicLinkSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
 })
 
+export const VerifyMagicLinkSchema = z.object({
+  token_hash: z.string().min(1, "Token hash is required"),
+})
+
 export const ResetPasswordSchema = z.object({
   token: z.string(),
   password: z

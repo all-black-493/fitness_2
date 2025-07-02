@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, useEffect } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -16,7 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { NotificationsPanel } from "@/components/notifications/notifications-panel"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from "sonner"
 import { logoutAction } from "@/lib/actions/auth"
 import {
   Home,
@@ -54,24 +54,34 @@ export function Sidebar() {
   const [isOpen, setIsOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
-  const { toast } = useToast()
+  const [userProfile, setUserProfile] = useState<any>(null)
+  const [profileError, setProfileError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let isMounted = true
+    setProfileError(null)
+    startTransition(() => {
+      import("@/lib/actions/profile").then(async mod => {
+        try {
+          const profile = await mod.getCurrentUserProfile()
+          if (isMounted) setUserProfile(profile)
+        } catch (err: any) {
+          if (isMounted) setProfileError(err.message || "Not authenticated")
+        }
+      })
+    })
+    return () => { isMounted = false }
+  }, [])
 
   const handleLogout = () => {
     startTransition(async () => {
       const result = await logoutAction({})
 
       if (result?.data?.success) {
-        toast({
-          title: "Logged out",
-          description: result.data.success,
-        })
-        router.push("/auth/login")
+        toast.success(result.data.success)
+        router.push("/auth/pw-login")
       } else if (result?.data?.error) {
-        toast({
-          title: "Logout failed",
-          description: result.data.error,
-          variant: "destructive",
-        })
+        toast.error(result.data.error)
       }
     })
   }
@@ -138,12 +148,20 @@ export function Sidebar() {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="flex items-center space-x-3 w-full justify-start">
                     <Avatar className="h-8 w-8">
-                      <AvatarImage src="/placeholder.svg?height=32&width=32" />
-                      <AvatarFallback>JD</AvatarFallback>
+                      <AvatarImage src={userProfile?.avatar_url || "/placeholder.svg?height=32&width=32"} />
+                      <AvatarFallback>{userProfile?.username?.slice(0, 2).toUpperCase() || "??"}</AvatarFallback>
                     </Avatar>
                     <div className="flex-1 text-left">
-                      <p className="text-sm font-medium">John Doe</p>
-                      <p className="text-xs text-muted-foreground">john@example.com</p>
+                      {isPending ? (
+                        <p className="text-sm font-medium animate-pulse">Loading...</p>
+                      ) : profileError ? (
+                        <p className="text-sm text-muted-foreground">Not signed in</p>
+                      ) : (
+                        <>
+                          <p className="text-sm font-medium">{userProfile?.full_name || userProfile?.username || "User"}</p>
+                          <p className="text-xs text-muted-foreground">{userProfile?.email || "No email"}</p>
+                        </>
+                      )}
                     </div>
                   </Button>
                 </DropdownMenuTrigger>
@@ -151,7 +169,7 @@ export function Sidebar() {
                   <DropdownMenuLabel>My Account</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
-                    <Link href="/profile/johndoe">
+                    <Link href={userProfile ? `/profile/${userProfile.username}` : "/auth/login"}>
                       <User className="mr-2 h-4 w-4" />
                       Profile
                     </Link>

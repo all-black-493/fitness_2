@@ -1,4 +1,7 @@
 import { AIWorkoutPlanner } from "@/components/ai-workout-planner"
+import { ErrorBoundary } from "@/components/error-boundary"
+import { Suspense } from "react"
+import { LoadingSkeleton } from "@/components/ui/loading-skeleton"
 
 export default function AIWorkoutPlannerPage() {
   return (
@@ -9,8 +12,11 @@ export default function AIWorkoutPlannerPage() {
           Let artificial intelligence create the perfect workout plan for your goals and lifestyle
         </p>
       </div>
-
-      <AIWorkoutPlanner />
+      <ErrorBoundary>
+        <Suspense fallback={<LoadingSkeleton className="w-full max-w-4xl mx-auto h-96" />}>
+          <AIWorkoutPlanner />
+        </Suspense>
+      </ErrorBoundary>
     </div>
   )
 }

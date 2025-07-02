@@ -93,7 +93,7 @@ export function CommunityHeader({ communityId }: CommunityHeaderProps) {
               Manage
             </Button>
           )}
-          <Button variant={community.isJoined ? "outline" : "default"}>
+          <Button variant={community.isJoined ? "outline" : "default"} formAction={community.isJoined ? leaveCommunityAction : joinCommunityAction}>
             {community.isJoined ? "Leave Community" : "Join Community"}
           </Button>
         </div>

@@ -1,6 +1,6 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/supabase-utils/server"
 import { revalidatePath } from "next/cache"
 
 export async function createNotification(userId: string, title: string, message: string, type: string, data?: any) {
@@ -72,4 +72,27 @@ export async function markAllNotificationsAsRead() {
 
   revalidatePath("/notifications")
   return { success: true }
+}
+
+export async function getNotifications(limit = 50) {
+  const supabase = await createClient()
+
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  if (authError || !user) {
+    throw new Error("Authentication required")
+  }
+
+  const { data, error } = await supabase
+    .from("notifications")
+    .select("*")
+    .eq("profile_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(limit)
+
+  if (error) {
+    console.error("Error fetching notifications:", error)
+    throw new Error("Failed to fetch notifications")
+  }
+
+  return data || []
 }

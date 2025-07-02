@@ -85,7 +85,7 @@ export function ChallengeDiscussion({ challengeId }: ChallengeDiscussionProps) {
                 className="min-h-[80px] resize-none"
               />
               <div className="flex justify-end">
-                <Button onClick={handlePost} disabled={isPosting || !newComment.trim()}>
+                <Button formAction={handlePost} disabled={isPosting || !newComment.trim()}>
                   {isPosting ? "Posting..." : "Post Comment"}
                 </Button>
               </div>

@@ -155,7 +155,7 @@ export function ChallengeHeader({ challengeId }: ChallengeHeaderProps) {
 
           {/* Action Buttons */}
           <div className="space-y-2">
-            <Button className="w-full" variant={challenge.isJoined ? "outline" : "default"}>
+            <Button className="w-full" variant={challenge.isJoined ? "outline" : "default"} formAction={challenge.isJoined ? leaveChallengeAction : joinChallengeAction}>
               {challenge.isJoined ? "Leave Challenge" : "Join Challenge"}
             </Button>
             <div className="flex space-x-2">

@@ -5,6 +5,7 @@ import { CommunityPosts } from "./community-posts"
 import { CommunityMembers } from "./community-members"
 import { CommunityChat } from "./community-chat"
 import { CommunityAbout } from "./community-about"
+import { CommunityWorkouts } from './community-workouts'
 
 interface CommunityTabsProps {
   communityId: string
@@ -13,9 +14,10 @@ interface CommunityTabsProps {
 export function CommunityTabs({ communityId }: CommunityTabsProps) {
   return (
     <Tabs defaultValue="posts" className="space-y-6">
-      <TabsList className="grid w-full grid-cols-4">
+      <TabsList className="grid w-full grid-cols-5">
         <TabsTrigger value="posts">Posts</TabsTrigger>
         <TabsTrigger value="members">Members</TabsTrigger>
+        <TabsTrigger value="workouts">Workouts</TabsTrigger>
         <TabsTrigger value="chat">Chat</TabsTrigger>
         <TabsTrigger value="about">About</TabsTrigger>
       </TabsList>
@@ -26,6 +28,10 @@ export function CommunityTabs({ communityId }: CommunityTabsProps) {
 
       <TabsContent value="members">
         <CommunityMembers communityId={communityId} />
+      </TabsContent>
+
+      <TabsContent value="workouts">
+        <CommunityWorkouts communityId={communityId} />
       </TabsContent>
 
       <TabsContent value="chat">

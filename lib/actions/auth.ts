@@ -6,8 +6,9 @@ import {
   LoginSchema,
   RegisterSchema,
   MagicLinkSchema,
+  VerifyMagicLinkSchema,
 } from "@/lib/validations/auth";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase-utils/server";
 
 export const loginAction = actionClient
   .inputSchema(LoginSchema)
@@ -72,7 +73,7 @@ export const magicLinkAction = actionClient
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
+        emailRedirectTo: "http://localhost:3000/",
       },
     });
 
@@ -83,11 +84,24 @@ export const magicLinkAction = actionClient
     return { success: "Magic link sent! Check your email." };
   });
 
-// --- Verify Magic Link ---
-// Usually handled by Supabase's built-in callback route
-// But you can expose a check if needed (not required unless doing custom verification)
+export const verifyMagicLinkAction = actionClient
+  .inputSchema(VerifyMagicLinkSchema)
+  .action(async ({ parsedInput: { token_hash } }) => {
+    const supabase = await createClient();
 
-// --- Logout ---
+    const { error } = await supabase.auth.verifyOtp({
+      token_hash,
+      type: 'magiclink',
+    });
+
+    if (error) {
+      return { error: error.message || "Failed to verify magic link." };
+    }
+
+    return { success: "Magic link verified successfully!" };
+  });
+
+
 export const logoutAction = actionClient
   .inputSchema(z.object({}))
   .action(async () => {
